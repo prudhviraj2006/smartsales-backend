@@ -56,7 +56,7 @@ async def startup():
 def root():
     return {
         "app": "SmartSales AI",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "status": "running",
         "docs": "/docs",
     }
