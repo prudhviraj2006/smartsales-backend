@@ -33,6 +33,23 @@ app.include_router(chat.router)
 @app.on_event("startup")
 async def startup():
     init_db()
+    from app.core.database import SessionLocal
+    from app.models.schemas import User
+    
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == 1).first()
+        if not user:
+            mock_user = User(
+                id=1,
+                email="test@example.com",
+                password_hash="fakehash",
+                full_name="Bypass User"
+            )
+            db.add(mock_user)
+            db.commit()
+    finally:
+        db.close()
 
 
 @app.get("/")
