@@ -84,6 +84,8 @@ async def upload_csv(
     # Save file
     unique_name = f"{uuid.uuid4().hex}_{file.filename}"
     file_path = os.path.join(settings.UPLOAD_DIR, unique_name)
+    
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
     with open(file_path, "wb") as f:
         f.write(content)
