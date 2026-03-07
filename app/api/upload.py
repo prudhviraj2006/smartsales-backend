@@ -146,3 +146,57 @@ def list_files(
         }
         for f in files
     ]
+
+@router.post("/upload/sample")
+def upload_sample_data(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    import datetime, math, random
+
+    csv_data = "date,sales,category,region\n"
+    categories = ["Electronics", "Clothing", "Food", "Home"]
+    regions = ["North", "South", "East", "West"]
+    start_date = datetime.date(2024, 1, 1)
+
+    for i in range(365):
+        d = start_date + datetime.timedelta(days=i)
+        base_sales = 1000 + math.sin(i * 0.017) * 300
+        sales = round(base_sales + random.uniform(0, 200))
+        cat = categories[i % len(categories)]
+        region = random.choice(regions)
+        csv_data += f"{d.isoformat()},{sales},{cat},{region}\n"
+
+    unique_name = f"{uuid.uuid4().hex}_sample_sales_data.csv"
+    file_path = os.path.join(settings.UPLOAD_DIR, unique_name)
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(csv_data)
+
+    validation = validate_csv(file_path)
+
+    uploaded = UploadedFile(
+        user_id=current_user["user_id"],
+        filename=unique_name,
+        original_filename="sample_sales_data.csv",
+        file_path=file_path,
+        file_size=len(csv_data),
+        row_count=validation["row_count"],
+        column_names=validation["columns"],
+        date_column=validation["date_column"],
+        target_column=None,
+    )
+    db.add(uploaded)
+    db.commit()
+    db.refresh(uploaded)
+
+    return {
+        "id": uploaded.id,
+        "filename": "sample_sales_data.csv",
+        "row_count": validation["row_count"],
+        "columns": validation["columns"],
+        "date_column": validation["date_column"],
+        "numeric_columns": validation["numeric_columns"],
+        "message": "Sample data uploaded successfully!",
+    }
