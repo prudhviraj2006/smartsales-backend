@@ -4,7 +4,6 @@ sqlalchemy
 
 alembic
 python-jose[cryptography]
-passlib[bcrypt]
 python-multipart
 pandas
 numpy
