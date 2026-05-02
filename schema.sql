@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS forecast_results (
     top_driver VARCHAR(255),
     confidence_lower JSONB,
     confidence_upper JSONB,
+    decomposition JSONB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

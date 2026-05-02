@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.gitignore
+.env
+.env.example
+*.db
+uploads/
+pip_log.txt
+uvi_start.log
+deploy_gcp.bat
+deploy_gcp.sh
+docker-compose.yml
+*.apk

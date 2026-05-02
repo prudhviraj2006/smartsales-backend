@@ -15,3 +15,10 @@ pydantic-settings
 python-dotenv
 aiofiles
 bcrypt
+mangum
+gunicorn
+pg8000
+psycopg2-binary
+openai
+reportlab
+matplotlib

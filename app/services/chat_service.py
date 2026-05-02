@@ -53,6 +53,16 @@ def classify_intent(message: str) -> str:
     return "general"
 
 
+def format_in_rupee(value: float) -> str:
+    """Helper to format currency in Indian style with L/Cr suffixes."""
+    abs_val = abs(value)
+    if abs_val >= 10000000: # 1 Crore
+        return f"₹{value / 10000000:.2f} Cr"
+    if abs_val >= 100000: # 1 Lakh
+        return f"₹{value / 100000:.2f} L"
+    return f"₹{value:,.2f}"
+
+
 def generate_response(
     message: str,
     forecast_context: Optional[Dict[str, Any]] = None,
@@ -62,13 +72,28 @@ def generate_response(
     intent = classify_intent(message)
 
     if forecast_context is None:
-        return (
-            "I don't have any forecast data loaded yet. "
-            "Please upload your data and run a forecast first, "
-            "then I can provide intelligent business insights!"
-        )
+        # Fallback for when no data is loaded yet
+        if intent == "general":
+            return (
+                "👋 Hello! I'm your SmartSales AI Assistant. I don't have your specific business data yet, "
+                "but I can help you with general sales forecasting concepts or guide you on how to upload your data.\n\n"
+                "To get started, please **Upload a CSV** in the 'Upload' tab and **Train a Model**!"
+            )
+        elif intent == "strategy":
+            import random
+            advice = random.choice(STRATEGY_TEMPLATES)
+            return (
+                f"While I don't have your specific data yet, here is a general business strategy: {advice}\n\n"
+                "Once you upload your sales history, I can provide much more tailored recommendations!"
+            )
+        else:
+            return (
+                "I don't have any forecast data loaded yet. "
+                "Please upload your data and run a forecast first, "
+                "then I can provide intelligent business insights and specific details about your " + intent + "!"
+            )
 
-    # Extract context
+    # Extract context (rest of the logic remains the same)
     growth_rate = forecast_context.get("growth_rate", 0)
     accuracy = forecast_context.get("accuracy", 0)
     mape = forecast_context.get("mape", 0)
@@ -137,7 +162,7 @@ def generate_response(
         "accuracy": accuracy,
         "mape": mape,
         "accuracy_assessment": accuracy_assessment,
-        "projected_revenue": projected_revenue,
+        "projected_revenue": format_in_rupee(projected_revenue),
         "risk_level": risk_level,
         "risk_detail": risk_detail,
         "revenue_trend": revenue_trend,
@@ -149,7 +174,9 @@ def generate_response(
 
     if intent in KNOWLEDGE_BASE:
         try:
-            response = KNOWLEDGE_BASE[intent].format(**context)
+            # Map the old placeholder ${projected_revenue:,.2f} to our formatted string
+            # KNOWLEDGE_BASE uses {projected_revenue} now after format
+            response = KNOWLEDGE_BASE[intent].replace("${projected_revenue:,.2f}", "{projected_revenue}").format(**context)
         except (KeyError, IndexError):
             response = f"Based on your {model_type} forecast: {trend_description} with {accuracy}% accuracy."
     else:
@@ -158,7 +185,7 @@ def generate_response(
             f"Great question! Here's what I can tell you based on your {model_type} forecast:\n\n"
             f"• **Trend**: {trend_description}\n"
             f"• **Accuracy**: {accuracy}% (MAPE: {mape}%)\n"
-            f"• **Projected Revenue**: ${projected_revenue:,.2f}\n"
+            f"• **Projected Revenue**: {format_in_rupee(projected_revenue)}\n"
             f"• **Key Driver**: {top_driver}\n\n"
             f"Is there something specific you'd like to dive deeper into? "
             f"I can help with risk analysis, strategy recommendations, or model details."

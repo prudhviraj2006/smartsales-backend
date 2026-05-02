@@ -128,6 +128,23 @@ def train_prophet(
 
     top_driver = "Trend" if trend_strength > seasonality_strength else "Seasonality"
 
+    # Time Series Decomposition (Prophet only)
+    components_df = model.predict(df[["ds"]])
+    decomposition = {
+        "trend": [
+            {"date": row["ds"].strftime("%Y-%m-%d"), "value": round(float(row["trend"]), 2)}
+            for _, row in components_df.iterrows()
+        ],
+        "seasonal": [
+            {"date": row["ds"].strftime("%Y-%m-%d"), "value": round(float(row["yearly"] if "yearly" in row else (row["weekly"] if "weekly" in row else 0)), 2)}
+            for _, row in components_df.iterrows()
+        ],
+        "residual": [
+            {"date": row["ds"].strftime("%Y-%m-%d"), "value": round(float(row["y"] - row["yhat"]), 2)}
+            for _, (idx, row) in pd.concat([df.reset_index(drop=True), components_df.reset_index(drop=True)], axis=1).iterrows()
+        ]
+    }
+
     return {
         "model_type": "prophet",
         "forecast_data": forecast_data,
@@ -138,6 +155,7 @@ def train_prophet(
         "growth_rate": growth_rate,
         "accuracy": accuracy,
         "top_driver": top_driver,
+        "decomposition": decomposition,
         "metrics": {
             "mae": round(mae, 4),
             "rmse": round(rmse, 4),

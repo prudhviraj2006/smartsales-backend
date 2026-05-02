@@ -3,12 +3,15 @@ Forecast API Router – Train models, get forecasts & metrics.
 """
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse, Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.schemas import UploadedFile, ForecastResult, ModelMetric
 from app.services.ml_service import train_model
+from app.services.export_service import generate_forecast_csv, generate_forecast_pdf
+from app.services.insight_service import generate_insights
 
 router = APIRouter(prefix="/api", tags=["Forecast"])
 
@@ -83,6 +86,7 @@ def train_forecast(
         top_driver=result["top_driver"],
         confidence_lower=result["confidence_lower"],
         confidence_upper=result["confidence_upper"],
+        decomposition=result.get("decomposition"),
     )
     db.add(forecast)
     db.commit()
@@ -145,6 +149,7 @@ def get_forecast(
         "top_driver": forecast.top_driver,
         "confidence_lower": forecast.confidence_lower,
         "confidence_upper": forecast.confidence_upper,
+        "decomposition": forecast.decomposition,
         "created_at": forecast.created_at.isoformat() if forecast.created_at else None,
     }
 
@@ -190,3 +195,64 @@ def get_metrics(
         }
         for m in metrics
     ]
+
+@router.get("/export/csv")
+def export_csv(
+    forecast_id: int = None,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(ForecastResult).filter(ForecastResult.user_id == current_user["user_id"])
+    if forecast_id:
+        query = query.filter(ForecastResult.id == forecast_id)
+    
+    forecast = query.order_by(ForecastResult.created_at.desc()).first()
+    if not forecast:
+        raise HTTPException(status_code=404, detail="Forecast not found")
+
+    csv_content = generate_forecast_csv(forecast)
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=forecast_{forecast.id}.csv"}
+    )
+
+class PDFRequest(BaseModel):
+    forecast_id: int = None
+    chart_image: str = None # Base64 string
+
+@router.post("/export/pdf")
+def export_pdf(
+    req: PDFRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(ForecastResult).filter(ForecastResult.user_id == current_user["user_id"])
+    if req.forecast_id:
+        query = query.filter(ForecastResult.id == req.forecast_id)
+    
+    forecast = query.order_by(ForecastResult.created_at.desc()).first()
+    if not forecast:
+        raise HTTPException(status_code=404, detail="Forecast not found")
+
+    # Get metrics
+    metric = db.query(ModelMetric).filter(ModelMetric.forecast_id == forecast.id).first()
+    
+    # Get insights
+    insights = generate_insights(
+        forecast_data=forecast.forecast_data,
+        actual_data=forecast.actual_data,
+        metrics={"mape": metric.mape if metric else 0},
+        growth_rate=forecast.growth_rate,
+        accuracy=forecast.accuracy,
+        top_driver=forecast.top_driver,
+        model_type=forecast.model_type
+    )
+
+    pdf_buffer = generate_forecast_pdf(forecast, metric, insights, req.chart_image)
+    
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=report_{forecast.id}.pdf"}
+    )

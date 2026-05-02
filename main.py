@@ -3,6 +3,8 @@ SmartSales AI – FastAPI Backend Entry Point
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from mangum import Mangum
+
 from app.core.config import settings
 from app.core.database import init_db
 from app.api import auth, upload, forecast, insights, chat
@@ -32,24 +34,32 @@ app.include_router(chat.router)
 
 @app.on_event("startup")
 async def startup():
-    init_db()
-    from app.core.database import SessionLocal
-    from app.models.schemas import User
-    
-    db = SessionLocal()
     try:
-        user = db.query(User).filter(User.id == 1).first()
-        if not user:
-            mock_user = User(
-                id=1,
-                email="test@example.com",
-                password_hash="fakehash",
-                full_name="Bypass User"
-            )
-            db.add(mock_user)
-            db.commit()
-    finally:
-        db.close()
+        init_db()
+        print("[OK] Database initialized successfully.")
+        
+        from app.core.database import SessionLocal
+        from app.models.schemas import User
+        
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == 1).first()
+            if not user:
+                mock_user = User(
+                    id=1,
+                    email="test@example.com",
+                    password_hash="fakehash",
+                    full_name="Bypass User"
+                )
+                db.add(mock_user)
+                db.commit()
+                print("[OK] Mock user created.")
+        except Exception as e:
+            print(f"[WARN] Error during database seeding: {str(e)}")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[ERROR] CRITICAL ERROR during startup: {str(e)}")
 
 
 @app.get("/")
@@ -65,6 +75,9 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+
+# Serverless AWS Lambda Handler
+handler = Mangum(app)
 
 
 if __name__ == "__main__":

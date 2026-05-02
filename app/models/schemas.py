@@ -58,6 +58,7 @@ class ForecastResult(Base):
     top_driver = Column(String(255))
     confidence_lower = Column(JSON)
     confidence_upper = Column(JSON)
+    decomposition = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="forecasts")

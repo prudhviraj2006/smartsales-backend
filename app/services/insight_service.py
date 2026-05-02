@@ -80,13 +80,77 @@ def generate_insights(
     top_driver: str,
     model_type: str,
 ) -> List[Dict[str, Any]]:
-    """Generate comprehensive AI business insights."""
+    """Generate comprehensive AI business insights using GPT-4o if available."""
+    from app.core.config import settings
+    
+    # Check if OpenAI API key is available
+    if settings.OPENAI_API_KEY:
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            
+            prompt = f"""
+            As an expert business analyst, provide detailed insights based on the following sales forecast data:
+            - Model Type: {model_type}
+            - Forecast Accuracy: {accuracy}% (MAPE: {metrics.get('mape', 'N/A')}%)
+            - Projected Growth Rate: {growth_rate}%
+            - Top Influencing Factor: {top_driver}
+            - Metrics: {metrics}
+            - Sample Forecast Values: {forecast_data[:10]}...
+            
+            Please provide exactly 4 sections:
+            1. Executive Summary (2-3 sentences summarising the outlook)
+            2. Risk Warnings (based on forecast volatility and accuracy)
+            3. Growth Recommendations (how to capitalize on trends)
+            4. Inventory/Resource Planning (specific suggestions based on demand)
+            
+            Return the response in a structured format that I can parse.
+            """
+            
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are a professional business analyst providing strategic insights based on forecast data. Be concise, actionable, and data-driven."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            
+            content = response.choices[0].message.content
+            # Note: In a real app, you'd parse this more robustly. 
+            # For this demo, we'll split by sections or use a fallback if parsing fails.
+            
+            # Simple parsing logic (assuming GPT returns sections with headers)
+            sections = content.split("\n\n")
+            
+            insights = []
+            types = ["executive_summary", "risk_warnings", "growth_recommendations", "inventory_planning"]
+            titles = ["Executive Summary", "Risk Warnings", "Growth Recommendations", "Inventory/Resource Planning"]
+            icons = ["📊", "🚨", "🚀", "📦"]
+            colors = ["#3B82F6", "#EF4444", "#10B981", "#F59E0B"]
+            
+            for i, section in enumerate(sections[:4]):
+                # Remove header if exists (e.g. "1. Executive Summary:")
+                clean_content = section.split(":", 1)[-1].strip() if ":" in section else section.strip()
+                insights.append({
+                    "type": types[i],
+                    "title": titles[i],
+                    "icon": icons[i],
+                    "color": colors[i],
+                    "content": clean_content
+                })
+            
+            if len(insights) >= 4:
+                return insights
+        except Exception as e:
+            print(f"Error calling OpenAI: {e}")
+            # Fallback to rule-based insights if OpenAI fails
+
+    # --- Rule-based Fallback (Enhanced) ---
     insights = []
 
     # 1. Executive Summary
     trend = detect_trend(forecast_data)
     forecast_values = [d["value"] for d in forecast_data]
-    avg_forecast = np.mean(forecast_values) if forecast_values else 0
     total_projected = sum(forecast_values)
 
     trend_desc = {
@@ -104,97 +168,60 @@ def generate_insights(
             f"Based on {model_type.upper()} analysis, your business is {trend_desc.get(trend, 'stable')} "
             f"with a projected growth rate of {growth_rate}%. "
             f"Model accuracy stands at {accuracy}% (MAPE: {metrics.get('mape', 'N/A')}%). "
-            f"Total projected revenue for the forecast period: ${total_projected:,.2f}. "
-            f"The primary driver of your forecast is '{top_driver}'."
+            f"Total projected revenue: ${total_projected:,.2f}. "
+            f"The primary driver is '{top_driver}'."
         ),
     })
 
-    # 2. Risk Alerts
+    # 2. Risk Warnings
     risk_items = []
     mape = metrics.get("mape", 0)
     volatility = detect_volatility(actual_data)
 
     if mape > 20:
-        risk_items.append(
-            f"⚠️ High prediction error (MAPE: {mape}%). Model reliability is questionable. "
-            "Consider providing more data or adjusting parameters."
-        )
+        risk_items.append(f"⚠️ High prediction error ({mape}%). Reliability is low.")
     if volatility["level"] == "High":
-        risk_items.append(
-            f"⚠️ High revenue volatility detected ({volatility['volatility'] * 100:.1f}%). "
-            "Sudden swings may impact forecasting accuracy."
-        )
+        risk_items.append(f"⚠️ High volatility ({volatility['volatility'] * 100:.1f}%).")
     if growth_rate < -10:
-        risk_items.append(
-            f"⚠️ Significant projected decline ({growth_rate}%). "
-            "Immediate attention required to reverse the trend."
-        )
-
-    if not risk_items:
-        risk_items.append("✅ No critical risks detected. Forecast appears stable and reliable.")
+        risk_items.append(f"⚠️ Significant decline ({growth_rate}%).")
 
     insights.append({
-        "type": "risk_alerts",
-        "title": "Risk Alerts",
+        "type": "risk_warnings",
+        "title": "Risk Warnings",
         "icon": "🚨",
         "color": "#EF4444",
-        "content": " | ".join(risk_items),
+        "content": " | ".join(risk_items) if risk_items else "✅ No critical risks detected.",
     })
 
-    # 3. Growth Opportunities
+    # 3. Growth Recommendations
     opportunities = []
     seasonality = detect_seasonality(actual_data)
 
     if growth_rate > 0:
-        opportunities.append(
-            f"📈 Positive growth trajectory ({growth_rate}%). "
-            "Consider scaling marketing efforts to capitalize on momentum."
-        )
+        opportunities.append(f"📈 Positive growth ({growth_rate}%). Scale marketing.")
     if seasonality["detected"]:
-        opportunities.append(
-            f"🔄 {seasonality['description']} "
-            "Align inventory and campaigns with peak periods."
-        )
+        opportunities.append(f"🔄 Seasonality detected. Align inventory with peaks.")
     if accuracy > 85:
-        opportunities.append(
-            "🎯 High model accuracy enables confident resource allocation. "
-            "Use forecasts to optimize staffing and inventory."
-        )
-
-    if not opportunities:
-        opportunities.append(
-            "💡 Focus on data quality improvements and collecting more historical data "
-            "to unlock better forecasting capabilities."
-        )
+        opportunities.append("🎯 High accuracy. Confidently allocate resources.")
 
     insights.append({
-        "type": "growth_opportunities",
-        "title": "Growth Opportunities",
+        "type": "growth_recommendations",
+        "title": "Growth Recommendations",
         "icon": "🚀",
         "color": "#10B981",
-        "content": " | ".join(opportunities),
+        "content": " | ".join(opportunities) if opportunities else "💡 Focus on data quality improvements.",
     })
 
-    # 4. Inventory Optimization
+    # 4. Inventory Planning
     if forecast_values:
-        max_demand = max(forecast_values)
-        min_demand = min(forecast_values)
         avg_demand = np.mean(forecast_values)
         safety_stock = round(avg_demand * 0.2, 2)
-
         insights.append({
-            "type": "inventory_optimization",
-            "title": "Inventory Optimization",
+            "type": "inventory_planning",
+            "title": "Inventory Planning",
             "icon": "📦",
             "color": "#F59E0B",
-            "content": (
-                f"Projected demand range: ${min_demand:,.2f} – ${max_demand:,.2f}. "
-                f"Average forecast: ${avg_demand:,.2f}. "
-                f"Recommended safety stock level: ${safety_stock:,.2f} "
-                f"(20% buffer above average). "
-                f"Demand volatility is {volatility['level'].lower()}, "
-                f"{'requiring a larger safety margin.' if volatility['level'] == 'High' else 'supporting lean inventory management.'}"
-            ),
+            "content": f"Avg demand: ${avg_demand:,.2f}. Safety stock: ${safety_stock:,.2f} (20% buffer).",
         })
 
     return insights

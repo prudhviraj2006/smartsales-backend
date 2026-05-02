@@ -4,12 +4,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Detect cloud environment (Hugging Face)
+IS_HF = os.getenv("SPACE_ID") is not None
+BASE_DIR = "/tmp" if IS_HF else os.getcwd()
 
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "sqlite:///./smartsales.db"
+        f"sqlite:///{os.path.join(BASE_DIR, 'smartsales.db')}"
     )
 
     # JWT
@@ -25,8 +28,9 @@ class Settings(BaseSettings):
     DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
 
     # File Upload
-    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
-    MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB
+    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(BASE_DIR, "uploads"))
+    MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", "52428800"))  # 50MB
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 
     class Config:
         env_file = ".env"

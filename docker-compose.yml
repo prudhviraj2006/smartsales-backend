@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8000"
+    environment:
+      - PORT=8000
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./smartsales.db}
+      - HOST=0.0.0.0
+      - DEBUG=true
+    volumes:
+      - ./uploads:/app/uploads
+      - ./smartsales.db:/app/smartsales.db
+    restart: unless-stopped
+    command: sh -c "uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
