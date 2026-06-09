@@ -35,6 +35,12 @@ def prepare_time_series(
     data = data.dropna(subset=[date_col])
     data = data.sort_values(date_col).reset_index(drop=True)
 
+    # Convert target column to numeric (strip currency symbols/commas)
+    if data[target_col].dtype == 'object':
+        data[target_col] = data[target_col].astype(str).str.replace(r'[^\d.-]', '', regex=True)
+    data[target_col] = pd.to_numeric(data[target_col], errors='coerce')
+    data = data.dropna(subset=[target_col])
+
     if aggregation == "weekly":
         data = data.set_index(date_col).resample("W").sum().reset_index()
     elif aggregation == "monthly":
