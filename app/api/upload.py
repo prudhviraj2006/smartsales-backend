@@ -20,37 +20,46 @@ def validate_csv(file_path: str) -> dict:
     """Validate CSV file structure and content."""
     try:
         df = pd.read_csv(file_path)
+    except UnicodeDecodeError:
+        try:
+            df = pd.read_csv(file_path, encoding='ISO-8859-1')
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid CSV encoding: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid CSV file: {str(e)}")
 
-    if len(df) < 30:
+    if len(df) < 5:
         raise HTTPException(
             status_code=400,
-            detail=f"CSV must have at least 30 rows. Found: {len(df)}",
+            detail=f"CSV must have at least 5 rows. Found: {len(df)}",
         )
 
     columns = df.columns.tolist()
 
-    # Detect date column
+    # Detect date column (sample first 100 rows to prevent hanging)
     date_col = None
     for col in columns:
+        sample = df[col].dropna().head(100)
+        if sample.empty:
+            continue
         try:
-            pd.to_datetime(df[col], format="%Y-%m-%d", errors="raise")
+            pd.to_datetime(sample, format="%Y-%m-%d", errors="raise")
             date_col = col
             break
         except (ValueError, TypeError):
             try:
-                pd.to_datetime(df[col], errors="raise")
+                pd.to_datetime(sample, errors="raise")
                 date_col = col
                 break
             except (ValueError, TypeError):
                 continue
 
-    if date_col is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No valid date column found. Ensure a column has YYYY-MM-DD format.",
-        )
+    # Allow uploading even if date_col is None
+    # if date_col is None:
+    #     raise HTTPException(
+    #         status_code=400,
+    #         detail="No valid date column found. Ensure a column has YYYY-MM-DD format.",
+    #     )
 
     # Detect numeric columns
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
@@ -65,11 +74,12 @@ def validate_csv(file_path: str) -> dict:
                 numeric_cols.append(col)
                 # Note: We don't modify the dataframe here, just identifying the column as numeric-capable
 
-    if not numeric_cols:
-        raise HTTPException(
-            status_code=400,
-            detail="No numeric columns found for Sales/Revenue data. Ensure your sales column contains numbers.",
-        )
+    # Allow uploading even if no numeric columns
+    # if not numeric_cols:
+    #     raise HTTPException(
+    #         status_code=400,
+    #         detail="No numeric columns found for Sales/Revenue data. Ensure your sales column contains numbers.",
+    #     )
 
     return {
         "row_count": len(df),

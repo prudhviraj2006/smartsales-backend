@@ -23,8 +23,16 @@ def prepare_time_series(
     aggregation: str = "daily"
 ) -> pd.DataFrame:
     """Prepare and aggregate time series data."""
-    data = df[[date_col, target_col]].copy()
-    data[date_col] = pd.to_datetime(data[date_col])
+    if date_col is None or date_col not in df.columns:
+        # Create a synthetic date column starting from 2024-01-01
+        data = df[[target_col]].copy()
+        data['synthetic_date'] = pd.date_range(start='2024-01-01', periods=len(data), freq='D')
+        date_col = 'synthetic_date'
+    else:
+        data = df[[date_col, target_col]].copy()
+        
+    data[date_col] = pd.to_datetime(data[date_col], errors='coerce')
+    data = data.dropna(subset=[date_col])
     data = data.sort_values(date_col).reset_index(drop=True)
 
     if aggregation == "weekly":
@@ -341,8 +349,8 @@ def train_model(
     """Main entry point: prepare data and train the selected model."""
     ts_data = prepare_time_series(df, date_col, target_col, aggregation)
 
-    if len(ts_data) < 30:
-        raise ValueError("Need at least 30 data points for forecasting.")
+    if len(ts_data) < 5:
+        raise ValueError("Need at least 5 data points for forecasting.")
 
     if model_type == "prophet":
         return train_prophet(ts_data, horizon_months)
