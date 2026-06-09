@@ -40,7 +40,8 @@ def prepare_time_series(
     elif aggregation == "monthly":
         data = data.set_index(date_col).resample("M").sum().reset_index()
 
-    data.columns = ["ds", "y"]
+    # Explicitly rename columns instead of relying on positional order
+    data = data.rename(columns={date_col: "ds", target_col: "y"})
     return data
 
 
