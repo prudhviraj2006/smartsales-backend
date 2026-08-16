@@ -17,21 +17,26 @@ router = APIRouter(prefix="/api", tags=["Upload"])
 
 
 def validate_csv(file_path: str) -> dict:
-    """Validate CSV file structure and content."""
+    """Validate CSV or Excel file structure and content."""
+    lower_path = file_path.lower()
     try:
-        df = pd.read_csv(file_path)
-    except UnicodeDecodeError:
-        try:
-            df = pd.read_csv(file_path, encoding='ISO-8859-1')
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid CSV encoding: {str(e)}")
+        if lower_path.endswith('.xlsx') or lower_path.endswith('.xls'):
+            df = pd.read_excel(file_path)
+        else:
+            try:
+                df = pd.read_csv(file_path)
+            except UnicodeDecodeError:
+                try:
+                    df = pd.read_csv(file_path, encoding='ISO-8859-1')
+                except Exception as e:
+                    raise HTTPException(status_code=400, detail=f"Invalid CSV encoding: {str(e)}")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid CSV file: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid file format: {str(e)}")
 
     if len(df) < 5:
         raise HTTPException(
             status_code=400,
-            detail=f"CSV must have at least 5 rows. Found: {len(df)}",
+            detail=f"Dataset must have at least 5 rows. Found: {len(df)}",
         )
 
     columns = df.columns.tolist()
