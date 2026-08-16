@@ -47,6 +47,7 @@ class TrainRequest(BaseModel):
 
 
 @router.post("/train")
+@router.post("/forecast")
 def train_forecast(
     req: TrainRequest,
     current_user: dict = Depends(get_current_user),
