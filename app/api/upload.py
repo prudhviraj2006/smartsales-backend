@@ -39,9 +39,19 @@ def validate_csv(file_path: str) -> dict:
     # Detect date column (sample first 100 rows to prevent hanging)
     date_col = None
     for col in columns:
+        col_lower = str(col).strip().lower()
+        # Skip purely numeric columns from date parsing unless column name explicitly contains date keywords
+        if pd.api.types.is_numeric_dtype(df[col]) and not ('date' in col_lower or 'time' in col_lower or col_lower == 'year' or col_lower == 'ds'):
+            continue
+
         sample = df[col].dropna().head(100)
         if sample.empty:
             continue
+        
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            date_col = col
+            break
+
         try:
             pd.to_datetime(sample, format="%Y-%m-%d", errors="raise")
             date_col = col
@@ -54,38 +64,64 @@ def validate_csv(file_path: str) -> dict:
             except (ValueError, TypeError):
                 continue
 
-    # Allow uploading even if date_col is None
-    # if date_col is None:
-    #     raise HTTPException(
-    #         status_code=400,
-    #         detail="No valid date column found. Ensure a column has YYYY-MM-DD format.",
-    #     )
+    # Classify each column into: "id", "date", "numeric", "text"
+    columns_with_types = []
+    numeric_value_cols = []
 
-    # Detect numeric columns
-    numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
-    
-    # If no numeric columns found, try to detect "currency strings" that should be numeric
-    if not numeric_cols:
-        for col in columns:
-            if col == date_col: continue
-            # Check if column is mostly strings that look like numbers (with ₹, $, or ,)
-            sample = df[col].dropna().head(10).astype(str)
-            if sample.str.match(r'^[^\d]*[\d,\.]+[^\d]*$').all():
-                numeric_cols.append(col)
-                # Note: We don't modify the dataframe here, just identifying the column as numeric-capable
+    for col in columns:
+        col_lower = str(col).strip().lower()
 
-    # Allow uploading even if no numeric columns
-    # if not numeric_cols:
-    #     raise HTTPException(
-    #         status_code=400,
-    #         detail="No numeric columns found for Sales/Revenue data. Ensure your sales column contains numbers.",
-    #     )
+        # Check if ID column (Row ID, Customer ID, Postal Code, Order ID, etc.)
+        is_id = (
+            'id' in col_lower or
+            'postal' in col_lower or
+            'zip' in col_lower or
+            'code' in col_lower or
+            col_lower == 'row' or
+            col_lower == '#' or
+            col_lower.endswith('_id')
+        )
+
+        # Check if date column
+        is_date = (
+            col == date_col or
+            'date' in col_lower or
+            'time' in col_lower or
+            col_lower == 'ds' or
+            col_lower == 'year' or
+            col_lower == 'month' or
+            col_lower == 'day'
+        )
+
+        if is_id:
+            columns_with_types.append({"name": col, "type": "id"})
+        elif is_date:
+            columns_with_types.append({"name": col, "type": "date"})
+        else:
+            # Check numeric value type
+            is_num = False
+            if pd.api.types.is_numeric_dtype(df[col]):
+                is_num = True
+            else:
+                # Check if currency string or numeric text ($1,234.50)
+                sample = df[col].dropna().head(20).astype(str)
+                if not sample.empty:
+                    cleaned = sample.str.replace(r'[\$,₹%,\s]', '', regex=True)
+                    if cleaned.str.replace('.', '', regex=False).str.isnumeric().all():
+                        is_num = True
+
+            if is_num:
+                columns_with_types.append({"name": col, "type": "numeric"})
+                numeric_value_cols.append(col)
+            else:
+                columns_with_types.append({"name": col, "type": "text"})
 
     return {
         "row_count": len(df),
         "columns": columns,
         "date_column": date_col,
-        "numeric_columns": numeric_cols,
+        "numeric_columns": numeric_value_cols,
+        "columns_with_types": columns_with_types,
     }
 
 
@@ -154,6 +190,7 @@ async def upload_csv(
         "columns": validation["columns"],
         "date_column": validation["date_column"],
         "numeric_columns": validation["numeric_columns"],
+        "columns_with_types": validation["columns_with_types"],
         "message": "File uploaded successfully!",
     }
 
@@ -184,6 +221,73 @@ def list_files(
 class TextUploadRequest(BaseModel):
     csv_text: str
     filename: Optional[str] = "manual_upload.csv"
+
+class Base64UploadRequest(BaseModel):
+    base64_data: str
+    filename: Optional[str] = "uploaded_data.csv"
+
+@router.post("/upload/base64")
+def upload_csv_base64(
+    req: Base64UploadRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    import base64, re
+    if not req.base64_data or len(req.base64_data.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file data cannot be empty.")
+
+    raw_b64 = req.base64_data
+    if "," in raw_b64:
+        raw_b64 = raw_b64.split(",", 1)[1]
+
+    try:
+        file_bytes = base64.b64decode(raw_b64)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid base64 encoding: {str(e)}")
+
+    safe_filename = re.sub(r'[^\w\s\.-]', '', req.filename or "uploaded_data.csv").strip()
+    if not safe_filename:
+        safe_filename = "uploaded_data.csv"
+
+    unique_name = f"{uuid.uuid4().hex}_{safe_filename.replace(' ', '_')}"
+    file_path = os.path.join(settings.UPLOAD_DIR, unique_name)
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+    with open(file_path, "wb") as f:
+        f.write(file_bytes)
+
+    try:
+        validation = validate_csv(file_path)
+    except HTTPException:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
+
+    uploaded = UploadedFile(
+        user_id=current_user["user_id"],
+        filename=unique_name,
+        original_filename=req.filename,
+        file_path=file_path,
+        file_size=len(file_bytes),
+        row_count=validation["row_count"],
+        column_names=validation["columns"],
+        date_column=validation["date_column"],
+        target_column=None,
+    )
+    db.add(uploaded)
+    db.commit()
+    db.refresh(uploaded)
+
+    return {
+        "id": uploaded.id,
+        "filename": req.filename,
+        "row_count": validation["row_count"],
+        "columns": validation["columns"],
+        "date_column": validation["date_column"],
+        "numeric_columns": validation["numeric_columns"],
+        "columns_with_types": validation["columns_with_types"],
+        "message": "Data uploaded successfully!",
+    }
 
 @router.post("/upload/text")
 def upload_csv_text(
@@ -230,6 +334,7 @@ def upload_csv_text(
         "columns": validation["columns"],
         "date_column": validation["date_column"],
         "numeric_columns": validation["numeric_columns"],
+        "columns_with_types": validation["columns_with_types"],
         "message": "Manual data uploaded successfully!",
     }
 
@@ -284,5 +389,6 @@ def upload_sample_data(
         "columns": validation["columns"],
         "date_column": validation["date_column"],
         "numeric_columns": validation["numeric_columns"],
+        "columns_with_types": validation["columns_with_types"],
         "message": "Sample data uploaded successfully!",
     }

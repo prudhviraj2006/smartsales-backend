@@ -125,26 +125,26 @@ def train_prophet(
     ]
 
     # Calculate projected revenue & growth
-    recent_avg = float(df["y"].tail(30).mean()) if len(df) >= 30 else float(df["y"].mean())
-    forecast_avg = float(future_forecast["yhat"].mean())
-    projected_revenue = round(forecast_avg * horizon_months * 30, 2)
+    historical_avg = float(df["y"].mean()) if len(df) > 0 else 0.0
+    forecast_vals = [f["value"] for f in forecast_data]
+    forecast_avg = float(np.mean(forecast_vals)) if forecast_vals else 0.0
+    projected_revenue = round(float(np.sum(forecast_vals)), 2)
     growth_rate = round(
-        ((forecast_avg - recent_avg) / recent_avg * 100) if recent_avg != 0 else 0, 2
+        ((forecast_avg - historical_avg) / historical_avg * 100) if historical_avg != 0 else 0.0, 2
     )
     accuracy = round(100 - mape, 2)
+    print(f"[ML_SERVICE DIAGNOSTIC] Prophet calculated metrics: MAE={round(mae, 4)}, RMSE={round(rmse, 4)}, MAPE={round(mape, 4)}, Accuracy={accuracy}")
 
     # Determine top driver
-    components = model.predict(df[["ds"]])
-    trend_strength = float(components["trend"].std())
-    seasonality_cols = [c for c in components.columns if "yearly" in c or "weekly" in c]
+    components_df = model.predict(df[["ds"]])
+    trend_strength = float(components_df["trend"].std())
+    seasonality_cols = [c for c in components_df.columns if "yearly" in c or "weekly" in c]
     seasonality_strength = sum(
-        float(components[c].std()) for c in seasonality_cols
+        float(components_df[c].std()) for c in seasonality_cols
     )
-
     top_driver = "Trend" if trend_strength > seasonality_strength else "Seasonality"
 
     # Time Series Decomposition (Prophet only)
-    components_df = model.predict(df[["ds"]])
     decomposition = {
         "trend": [
             {"date": row["ds"].strftime("%Y-%m-%d"), "value": round(float(row["trend"]), 2)}
@@ -258,7 +258,6 @@ def train_lightgbm(
 
     # Future forecast (iterative)
     future_periods = horizon_months * 30
-    last_known = data.iloc[-1:].copy()
     forecast_data = []
 
     current_data = data.copy()
@@ -310,14 +309,15 @@ def train_lightgbm(
     ]
 
     # Calculate projected revenue & growth
-    recent_avg = float(df["y"].tail(30).mean()) if len(df) >= 30 else float(df["y"].mean())
+    historical_avg = float(df["y"].mean()) if len(df) > 0 else 0.0
     forecast_vals = [f["value"] for f in forecast_data]
-    forecast_avg = float(np.mean(forecast_vals))
-    projected_revenue = round(forecast_avg * horizon_months * 30, 2)
+    forecast_avg = float(np.mean(forecast_vals)) if forecast_vals else 0.0
+    projected_revenue = round(float(np.sum(forecast_vals)), 2)
     growth_rate = round(
-        ((forecast_avg - recent_avg) / recent_avg * 100) if recent_avg != 0 else 0, 2
+        ((forecast_avg - historical_avg) / historical_avg * 100) if historical_avg != 0 else 0.0, 2
     )
     accuracy = round(100 - mape, 2)
+    print(f"[ML_SERVICE DIAGNOSTIC] LightGBM calculated metrics: MAE={round(mae, 4)}, RMSE={round(rmse, 4)}, MAPE={round(mape, 4)}, Accuracy={accuracy}")
 
     # Feature importance for top driver
     importances = dict(zip(feature_cols, model.feature_importances_))
@@ -354,14 +354,28 @@ def train_model(
     horizon_months: int = 6,
 ) -> Dict[str, Any]:
     """Main entry point: prepare data and train the selected model."""
+    # Detect currency symbol before cleaning
+    currency_symbol = "₹"
+    if target_col in df.columns and df[target_col].dtype == 'object':
+        sample = df[target_col].dropna().astype(str).iloc[0]
+        import re
+        match = re.search(r'[^\d.,\s-]+', sample)
+        if match:
+            currency_symbol = match.group(0).strip()
+            if not currency_symbol:
+                currency_symbol = "₹"
+
     ts_data = prepare_time_series(df, date_col, target_col, aggregation)
 
     if len(ts_data) < 5:
         raise ValueError("Need at least 5 data points for forecasting.")
 
     if model_type == "prophet":
-        return train_prophet(ts_data, horizon_months)
+        result = train_prophet(ts_data, horizon_months)
     elif model_type == "lightgbm":
-        return train_lightgbm(ts_data, horizon_months)
+        result = train_lightgbm(ts_data, horizon_months)
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
+        
+    result["currency_symbol"] = currency_symbol
+    return result

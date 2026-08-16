@@ -47,20 +47,69 @@ def classify_intent(message: str) -> str:
     if any(w in msg for w in ["strategy", "advice", "recommend", "suggest", "improve", "how to", "what should"]):
         return "strategy"
     if any(w in msg for w in ["seasonal", "pattern", "cycle", "trend"]):
+"""
+Chat Service – AI Business Assistant.
+Uses forecast context to provide intelligent responses.
+"""
+import json
+from typing import Dict, Any, List, Optional
+import numpy as np
+
+
+# Pre-defined response patterns for offline AI chat (no API key needed)
+KNOWLEDGE_BASE = {
+    "forecast": "Based on the current forecast, {trend_description}. The model predicts {growth_text} with {accuracy}% accuracy.",
+    "accuracy": "The model's MAPE is {mape}%, which means the average prediction error is about {mape}% of the actual values. {accuracy_assessment}",
+    "revenue": "Projected total revenue for the forecast period is {projected_revenue}. {revenue_trend}",
+    "risk": "Current risk assessment: {risk_level}. {risk_detail}",
+    "strategy": "{strategy_recommendation}",
+    "seasonality": "{seasonality_info}",
+    "model": "You are currently using the {model_type} model. {model_description}",
+}
+
+STRATEGY_TEMPLATES = [
+    "Consider diversifying revenue streams to reduce dependency on seasonal peaks.",
+    "Focus on customer retention strategies – a 5% increase in retention can boost profits by 25-95%.",
+    "Analyze your top-performing products/services and allocate more resources to scale them.",
+    "Implement dynamic pricing strategies based on demand forecast patterns.",
+    "Build strategic inventory buffers ahead of projected high-demand periods.",
+    "Invest in marketing during projected low periods to smooth revenue cycles.",
+]
+
+MODEL_DESCRIPTIONS = {
+    "prophet": "Prophet (by Meta) excels at capturing trends and seasonality in your data. It's particularly good with daily/weekly patterns and handles outliers well.",
+    "lightgbm": "LightGBM is a gradient boosting model that uses lag features, rolling averages, and date features. It often provides higher accuracy for complex patterns.",
+}
+
+
+def classify_intent(message: str) -> str:
+    """Simple intent classification."""
+    msg = message.lower()
+    if any(w in msg for w in ["forecast", "predict", "projection", "future"]):
+        return "forecast"
+    if any(w in msg for w in ["accuracy", "error", "mape", "mae", "rmse", "reliable"]):
+        return "accuracy"
+    if any(w in msg for w in ["revenue", "sales", "income", "money", "profit"]):
+        return "revenue"
+    if any(w in msg for w in ["risk", "danger", "warning", "concern", "worry"]):
+        return "risk"
+    if any(w in msg for w in ["strategy", "advice", "recommend", "suggest", "improve", "how to", "what should"]):
+        return "strategy"
+    if any(w in msg for w in ["seasonal", "pattern", "cycle", "trend"]):
         return "seasonality"
     if any(w in msg for w in ["model", "prophet", "lightgbm", "algorithm"]):
         return "model"
     return "general"
 
 
-def format_in_rupee(value: float) -> str:
-    """Helper to format currency in Indian style with L/Cr suffixes."""
+def format_currency(value: float, symbol: str = "₹") -> str:
+    """Helper to format currency with symbol and L/Cr suffixes."""
     abs_val = abs(value)
     if abs_val >= 10000000: # 1 Crore
-        return f"₹{value / 10000000:.2f} Cr"
+        return f"{symbol}{value / 10000000:.2f} Cr"
     if abs_val >= 100000: # 1 Lakh
-        return f"₹{value / 100000:.2f} L"
-    return f"₹{value:,.2f}"
+        return f"{symbol}{value / 100000:.2f} L"
+    return f"{symbol}{value:,.2f}"
 
 
 def generate_response(
@@ -100,6 +149,7 @@ def generate_response(
     projected_revenue = forecast_context.get("projected_revenue", 0)
     model_type = forecast_context.get("model_type", "unknown")
     top_driver = forecast_context.get("top_driver", "Unknown")
+    currency_symbol = forecast_context.get("currency_symbol", "₹")
 
     # Trend
     trend_description = (
@@ -162,7 +212,7 @@ def generate_response(
         "accuracy": accuracy,
         "mape": mape,
         "accuracy_assessment": accuracy_assessment,
-        "projected_revenue": format_in_rupee(projected_revenue),
+        "projected_revenue": format_currency(projected_revenue, currency_symbol),
         "risk_level": risk_level,
         "risk_detail": risk_detail,
         "revenue_trend": revenue_trend,
@@ -174,9 +224,7 @@ def generate_response(
 
     if intent in KNOWLEDGE_BASE:
         try:
-            # Map the old placeholder ${projected_revenue:,.2f} to our formatted string
-            # KNOWLEDGE_BASE uses {projected_revenue} now after format
-            response = KNOWLEDGE_BASE[intent].replace("${projected_revenue:,.2f}", "{projected_revenue}").format(**context)
+            response = KNOWLEDGE_BASE[intent].format(**context)
         except (KeyError, IndexError):
             response = f"Based on your {model_type} forecast: {trend_description} with {accuracy}% accuracy."
     else:
@@ -185,7 +233,7 @@ def generate_response(
             f"Great question! Here's what I can tell you based on your {model_type} forecast:\n\n"
             f"• **Trend**: {trend_description}\n"
             f"• **Accuracy**: {accuracy}% (MAPE: {mape}%)\n"
-            f"• **Projected Revenue**: {format_in_rupee(projected_revenue)}\n"
+            f"• **Projected Revenue**: {format_currency(projected_revenue, currency_symbol)}\n"
             f"• **Key Driver**: {top_driver}\n\n"
             f"Is there something specific you'd like to dive deeper into? "
             f"I can help with risk analysis, strategy recommendations, or model details."

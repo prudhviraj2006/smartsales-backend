@@ -17,21 +17,32 @@ def migrate():
     if 'decomposition' not in columns:
         try:
             cursor.execute("ALTER TABLE forecast_results ADD COLUMN decomposition JSON")
-            print("✅ Added 'decomposition' column to forecast_results")
+            print("Added 'decomposition' column to forecast_results")
         except Exception as e:
             print(f"Error adding decomposition: {e}")
     else:
-        print("✅ 'decomposition' column already exists in forecast_results")
+        print("decomposition column already exists in forecast_results")
 
-    # Check model_metrics for residuals (just in case)
+    if 'currency_symbol' not in columns:
+        try:
+            cursor.execute("ALTER TABLE forecast_results ADD COLUMN currency_symbol VARCHAR(10) DEFAULT 'R'")
+            print("Added 'currency_symbol' column to forecast_results")
+        except Exception as e:
+            print(f"Error adding currency_symbol: {e}")
+    else:
+        print("currency_symbol column already exists in forecast_results")
+
+    # Check model_metrics for residuals
     cursor.execute("PRAGMA table_info(model_metrics)")
     columns = [row[1] for row in cursor.fetchall()]
     if 'residuals' not in columns:
         try:
             cursor.execute("ALTER TABLE model_metrics ADD COLUMN residuals JSON")
-            print("✅ Added 'residuals' column to model_metrics")
+            print("Added 'residuals' column to model_metrics")
         except Exception as e:
             print(f"Error adding residuals: {e}")
+    else:
+        print("residuals column already exists in model_metrics")
 
     conn.commit()
     conn.close()
@@ -39,3 +50,4 @@ def migrate():
 
 if __name__ == "__main__":
     migrate()
+

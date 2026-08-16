@@ -26,6 +26,15 @@ def get_insights(
 
     forecast = query.order_by(ForecastResult.created_at.desc()).first()
 
+    if not forecast and forecast_id:
+        # Fallback to latest forecast for user if specified ID not found
+        forecast = (
+            db.query(ForecastResult)
+            .filter(ForecastResult.user_id == current_user["user_id"])
+            .order_by(ForecastResult.created_at.desc())
+            .first()
+        )
+
     if not forecast:
         raise HTTPException(status_code=404, detail="No forecast found. Train a model first.")
 
@@ -54,7 +63,11 @@ def get_insights(
         accuracy=forecast.accuracy or 0,
         top_driver=forecast.top_driver or "Unknown",
         model_type=forecast.model_type or "unknown",
+        currency_symbol=getattr(forecast, "currency_symbol", "₹"),
     )
+
+    print(f"📝 Requesting insights generation for forecast_id={forecast.id}")
+    print(f"✅ Generated {len(insights)} AI insights (model={forecast.model_type})")
 
     return {
         "forecast_id": forecast.id,

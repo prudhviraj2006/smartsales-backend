@@ -1,5 +1,5 @@
 """
-AI Insight Service – Generates business insights from forecast data.
+AI Insight Service � Generates business insights from forecast data.
 """
 import numpy as np
 from typing import Dict, Any, List
@@ -79,57 +79,26 @@ def generate_insights(
     accuracy: float,
     top_driver: str,
     model_type: str,
+    currency_symbol: str = "?"
 ) -> List[Dict[str, Any]]:
     """Generate comprehensive AI business insights using GPT-4o if available."""
     from app.core.config import settings
-    
-    # Check if OpenAI API key is available
-    if settings.OPENAI_API_KEY:
+    import openai
+
+    if hasattr(settings, 'OPENAI_API_KEY') and settings.OPENAI_API_KEY:
         try:
-            from openai import OpenAI
-            client = OpenAI(api_key=settings.OPENAI_API_KEY)
-            
-            prompt = f"""
-            As an expert business analyst, provide detailed insights based on the following sales forecast data:
-            - Model Type: {model_type}
-            - Forecast Accuracy: {accuracy}% (MAPE: {metrics.get('mape', 'N/A')}%)
-            - Projected Growth Rate: {growth_rate}%
-            - Top Influencing Factor: {top_driver}
-            - Metrics: {metrics}
-            - Sample Forecast Values: {forecast_data[:10]}...
-            
-            Please provide exactly 4 sections:
-            1. Executive Summary (2-3 sentences summarising the outlook)
-            2. Risk Warnings (based on forecast volatility and accuracy)
-            3. Growth Recommendations (how to capitalize on trends)
-            4. Inventory/Resource Planning (specific suggestions based on demand)
-            
-            Return the response in a structured format that I can parse.
-            """
-            
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are a professional business analyst providing strategic insights based on forecast data. Be concise, actionable, and data-driven."},
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            
-            content = response.choices[0].message.content
-            # Note: In a real app, you'd parse this more robustly. 
-            # For this demo, we'll split by sections or use a fallback if parsing fails.
-            
-            # Simple parsing logic (assuming GPT returns sections with headers)
-            sections = content.split("\n\n")
+            openai.api_key = settings.OPENAI_API_KEY
+            prompt = f"Generate business insights for {model_type} forecast.\nGrowth: {growth_rate}%, Accuracy: {accuracy}%, Driver: {top_driver}\nReturn 4 sections separated by |||: Executive Summary|||Risk Warnings|||Growth Recommendations|||Inventory Planning"
+            response = openai.ChatCompletion.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}])
+            sections = response.choices[0].message.content.split("|||")
             
             insights = []
             types = ["executive_summary", "risk_warnings", "growth_recommendations", "inventory_planning"]
             titles = ["Executive Summary", "Risk Warnings", "Growth Recommendations", "Inventory/Resource Planning"]
-            icons = ["📊", "🚨", "🚀", "📦"]
+            icons = ["??", "??", "??", "??"]
             colors = ["#3B82F6", "#EF4444", "#10B981", "#F59E0B"]
             
             for i, section in enumerate(sections[:4]):
-                # Remove header if exists (e.g. "1. Executive Summary:")
                 clean_content = section.split(":", 1)[-1].strip() if ":" in section else section.strip()
                 insights.append({
                     "type": types[i],
@@ -143,7 +112,6 @@ def generate_insights(
                 return insights
         except Exception as e:
             print(f"Error calling OpenAI: {e}")
-            # Fallback to rule-based insights if OpenAI fails
 
     # --- Rule-based Fallback (Enhanced) ---
     insights = []
@@ -162,13 +130,13 @@ def generate_insights(
     insights.append({
         "type": "executive_summary",
         "title": "Executive Summary",
-        "icon": "📊",
+        "icon": "??",
         "color": "#3B82F6",
         "content": (
             f"Based on {model_type.upper()} analysis, your business is {trend_desc.get(trend, 'stable')} "
             f"with a projected growth rate of {growth_rate}%. "
             f"Model accuracy stands at {accuracy}% (MAPE: {metrics.get('mape', 'N/A')}%). "
-            f"Total projected revenue: ${total_projected:,.2f}. "
+            f"Total projected revenue for the forecast period: {currency_symbol}{total_projected:,.2f}. "
             f"The primary driver is '{top_driver}'."
         ),
     })
@@ -179,18 +147,18 @@ def generate_insights(
     volatility = detect_volatility(actual_data)
 
     if mape > 20:
-        risk_items.append(f"⚠️ High prediction error ({mape}%). Reliability is low.")
+        risk_items.append(f"?? High prediction error ({mape}%). Reliability is low.")
     if volatility["level"] == "High":
-        risk_items.append(f"⚠️ High volatility ({volatility['volatility'] * 100:.1f}%).")
+        risk_items.append(f"?? High volatility ({volatility['volatility'] * 100:.1f}%).")
     if growth_rate < -10:
-        risk_items.append(f"⚠️ Significant decline ({growth_rate}%).")
+        risk_items.append(f"?? Significant decline ({growth_rate}%).")
 
     insights.append({
         "type": "risk_warnings",
         "title": "Risk Warnings",
-        "icon": "🚨",
+        "icon": "??",
         "color": "#EF4444",
-        "content": " | ".join(risk_items) if risk_items else "✅ No critical risks detected.",
+        "content": " | ".join(risk_items) if risk_items else "? No critical risks detected.",
     })
 
     # 3. Growth Recommendations
@@ -198,30 +166,32 @@ def generate_insights(
     seasonality = detect_seasonality(actual_data)
 
     if growth_rate > 0:
-        opportunities.append(f"📈 Positive growth ({growth_rate}%). Scale marketing.")
+        opportunities.append(f"?? Positive growth ({growth_rate}%). Scale marketing.")
     if seasonality["detected"]:
-        opportunities.append(f"🔄 Seasonality detected. Align inventory with peaks.")
+        opportunities.append(f"?? Seasonality detected. Align inventory with peaks.")
     if accuracy > 85:
-        opportunities.append("🎯 High accuracy. Confidently allocate resources.")
+        opportunities.append("?? High accuracy. Confidently allocate resources.")
 
     insights.append({
         "type": "growth_recommendations",
         "title": "Growth Recommendations",
-        "icon": "🚀",
+        "icon": "??",
         "color": "#10B981",
-        "content": " | ".join(opportunities) if opportunities else "💡 Focus on data quality improvements.",
+        "content": " | ".join(opportunities) if opportunities else "?? Focus on data quality improvements.",
     })
 
     # 4. Inventory Planning
     if forecast_values:
         avg_demand = np.mean(forecast_values)
+        min_demand = min(forecast_values)
+        max_demand = max(forecast_values)
         safety_stock = round(avg_demand * 0.2, 2)
         insights.append({
             "type": "inventory_planning",
             "title": "Inventory Planning",
-            "icon": "📦",
+            "icon": "??",
             "color": "#F59E0B",
-            "content": f"Avg demand: ${avg_demand:,.2f}. Safety stock: ${safety_stock:,.2f} (20% buffer).",
+            "content": f"Projected demand range: {currency_symbol}{min_demand:,.2f} - {currency_symbol}{max_demand:,.2f}. Average forecast: {currency_symbol}{avg_demand:,.2f}. Recommended safety stock level: {currency_symbol}{safety_stock:,.2f} (20% buffer).",
         })
 
     return insights

@@ -29,25 +29,24 @@ def chat(
     # Build forecast context
     forecast_context = None
     forecast_id = req.forecast_id
+    forecast = None
 
-    if not forecast_id:
-        # Get latest forecast
+    if forecast_id:
+        forecast = (
+            db.query(ForecastResult)
+            .filter(ForecastResult.id == forecast_id, ForecastResult.user_id == user_id)
+            .first()
+        )
+    if not forecast:
         forecast = (
             db.query(ForecastResult)
             .filter(ForecastResult.user_id == user_id)
             .order_by(ForecastResult.created_at.desc())
             .first()
         )
-        if forecast:
-            forecast_id = forecast.id
-    else:
-        forecast = (
-            db.query(ForecastResult)
-            .filter(ForecastResult.id == forecast_id, ForecastResult.user_id == user_id)
-            .first()
-        )
 
     if forecast:
+        forecast_id = forecast.id
         metric = (
             db.query(ModelMetric)
             .filter(ModelMetric.forecast_id == forecast.id)
@@ -60,7 +59,10 @@ def chat(
             "projected_revenue": forecast.projected_revenue or 0,
             "top_driver": forecast.top_driver or "Unknown",
             "mape": metric.mape if metric else 0,
+            "currency_symbol": getattr(forecast, "currency_symbol", "₹"),
         }
+
+    print(f"[CHAT API DIAGNOSTIC] User '{user_id}' query: '{req.message[:30]}...' -> Forecast context found: {forecast_context is not None}")
 
     # Get chat history
     history = (

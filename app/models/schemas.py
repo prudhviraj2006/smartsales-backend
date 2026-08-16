@@ -59,6 +59,7 @@ class ForecastResult(Base):
     confidence_lower = Column(JSON)
     confidence_upper = Column(JSON)
     decomposition = Column(JSON)
+    currency_symbol = Column(String(10), default="₹")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="forecasts")
