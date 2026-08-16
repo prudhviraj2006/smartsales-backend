@@ -1,5 +1,5 @@
 """
-AI Insight Service – Generates business insights from forecast data.
+AI Insight Service - Generates business insights from forecast data.
 """
 import numpy as np
 from typing import Dict, Any, List
