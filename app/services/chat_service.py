@@ -11,55 +11,6 @@ import numpy as np
 KNOWLEDGE_BASE = {
     "forecast": "Based on the current forecast, {trend_description}. The model predicts {growth_text} with {accuracy}% accuracy.",
     "accuracy": "The model's MAPE is {mape}%, which means the average prediction error is about {mape}% of the actual values. {accuracy_assessment}",
-    "revenue": "Projected total revenue for the forecast period is ${projected_revenue:,.2f}. {revenue_trend}",
-    "risk": "Current risk assessment: {risk_level}. {risk_detail}",
-    "strategy": "{strategy_recommendation}",
-    "seasonality": "{seasonality_info}",
-    "model": "You are currently using the {model_type} model. {model_description}",
-}
-
-STRATEGY_TEMPLATES = [
-    "Consider diversifying revenue streams to reduce dependency on seasonal peaks.",
-    "Focus on customer retention strategies – a 5% increase in retention can boost profits by 25-95%.",
-    "Analyze your top-performing products/services and allocate more resources to scale them.",
-    "Implement dynamic pricing strategies based on demand forecast patterns.",
-    "Build strategic inventory buffers ahead of projected high-demand periods.",
-    "Invest in marketing during projected low periods to smooth revenue cycles.",
-]
-
-MODEL_DESCRIPTIONS = {
-    "prophet": "Prophet (by Meta) excels at capturing trends and seasonality in your data. It's particularly good with daily/weekly patterns and handles outliers well.",
-    "lightgbm": "LightGBM is a gradient boosting model that uses lag features, rolling averages, and date features. It often provides higher accuracy for complex patterns.",
-}
-
-
-def classify_intent(message: str) -> str:
-    """Simple intent classification."""
-    msg = message.lower()
-    if any(w in msg for w in ["forecast", "predict", "projection", "future"]):
-        return "forecast"
-    if any(w in msg for w in ["accuracy", "error", "mape", "mae", "rmse", "reliable"]):
-        return "accuracy"
-    if any(w in msg for w in ["revenue", "sales", "income", "money", "profit"]):
-        return "revenue"
-    if any(w in msg for w in ["risk", "danger", "warning", "concern", "worry"]):
-        return "risk"
-    if any(w in msg for w in ["strategy", "advice", "recommend", "suggest", "improve", "how to", "what should"]):
-        return "strategy"
-    if any(w in msg for w in ["seasonal", "pattern", "cycle", "trend"]):
-"""
-Chat Service – AI Business Assistant.
-Uses forecast context to provide intelligent responses.
-"""
-import json
-from typing import Dict, Any, List, Optional
-import numpy as np
-
-
-# Pre-defined response patterns for offline AI chat (no API key needed)
-KNOWLEDGE_BASE = {
-    "forecast": "Based on the current forecast, {trend_description}. The model predicts {growth_text} with {accuracy}% accuracy.",
-    "accuracy": "The model's MAPE is {mape}%, which means the average prediction error is about {mape}% of the actual values. {accuracy_assessment}",
     "revenue": "Projected total revenue for the forecast period is {projected_revenue}. {revenue_trend}",
     "risk": "Current risk assessment: {risk_level}. {risk_detail}",
     "strategy": "{strategy_recommendation}",
